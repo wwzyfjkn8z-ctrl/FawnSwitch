@@ -1,7 +1,15 @@
 name: Release FawnSwitch
 on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing draft release tag
+        required: true
+        type: string
   push:
     tags: ['v*']
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 permissions:
   contents: write
 concurrency:
@@ -9,6 +17,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
+    if: github.event_name == 'push'
     strategy:
       fail-fast: false
       matrix:
@@ -60,6 +69,7 @@ jobs:
           prerelease: false
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
   publish:
+    if: ${{ always() && (needs.build.result == 'success' || github.event_name == 'workflow_dispatch') }}
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -68,6 +78,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release download "${GITHUB_REF_NAME}" --repo "$GITHUB_REPOSITORY" --pattern latest.json --dir "$RUNNER_TEMP/updater"
-          node scripts/verify-updater.mjs "$RUNNER_TEMP/updater/latest.json" "$GITHUB_REF_NAME"
-          gh release edit "${GITHUB_REF_NAME}" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern latest.json --dir "$RUNNER_TEMP/updater"
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,assets > "$RUNNER_TEMP/release.json"
+          node scripts/prepare-updater.mjs "$RUNNER_TEMP/updater/latest.json" "$RUNNER_TEMP/release.json" "$RELEASE_TAG"
+          node scripts/verify-updater.mjs "$RUNNER_TEMP/updater/latest.json" "$RELEASE_TAG"
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/updater/latest.json" --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
