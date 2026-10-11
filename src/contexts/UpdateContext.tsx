@@ -1,3 +1,5 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { getCurrentVersion, type UpdateInfo } from "../lib/updater";
@@ -61,11 +63,20 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
     setDownloadedBytes(0);
     setTotalBytes(null);
     try {
-      await updateRef.current.downloadAndInstall((event) => {
-        if (event.event === "Started") setTotalBytes(event.data.contentLength ?? null);
-        if (event.event === "Progress") setDownloadedBytes((bytes) => bytes + event.data.chunkLength);
+      const unlisten = await listen<{ downloaded: number; total?: number }>("update-download-progress", ({ payload }) => {
+        setDownloadedBytes(payload.downloaded);
+        setTotalBytes(payload.total ?? null);
       });
-      setInstalled(true);
+      try {
+        const completed = await invoke<boolean>("install_update_and_restart");
+        if (completed) setInstalled(true);
+        else {
+          setUpdateInfo(null);
+          setError("未检测到可用更新，请重新检查。");
+        }
+      } finally {
+        unlisten();
+      }
     } catch {
       setError("更新未完成，请重试或前往 GitHub 发布页手动下载安装包。");
     } finally {

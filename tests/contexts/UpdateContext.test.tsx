@@ -1,16 +1,22 @@
 import { renderHook, act, waitFor, cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { UpdateProvider, useUpdate } from "@/contexts/UpdateContext";
-const mocks = vi.hoisted(() => ({ check: vi.fn(), getCurrentVersion: vi.fn() }));
+const mocks = vi.hoisted(() => ({ check: vi.fn(), getCurrentVersion: vi.fn(), invoke: vi.fn(), listen: vi.fn() }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: mocks.listen }));
 vi.mock("@tauri-apps/plugin-updater", () => ({ check: mocks.check }));
 vi.mock("@/lib/updater", () => ({ getCurrentVersion: mocks.getCurrentVersion }));
-beforeEach(() => { vi.clearAllMocks(); mocks.getCurrentVersion.mockResolvedValue("0.2.8"); });
+beforeEach(() => { vi.clearAllMocks(); mocks.getCurrentVersion.mockResolvedValue("0.2.8"); mocks.listen.mockResolvedValue(vi.fn()); mocks.invoke.mockResolvedValue(true); });
 afterEach(cleanup);
 describe("FawnSwitch signed updates", () => {
   it("checks without installing, installs only on request, and reports progress", async () => {
-    const downloadAndInstall = vi.fn(async (progress) => {
-      progress({ event: "Started", data: { contentLength: 100 } });
-      progress({ event: "Progress", data: { chunkLength: 100 } });
+    const downloadAndInstall = mocks.invoke;
+    mocks.listen.mockImplementation(async (_name, handler) => {
+      mocks.invoke.mockImplementation(async () => {
+        handler({ payload: { downloaded: 100, total: 100 } });
+        return true;
+      });
+      return vi.fn();
     });
     mocks.check.mockResolvedValue({ version: "0.2.9", body: "release", date: "2026-10-11", close: vi.fn(), downloadAndInstall });
     const { result } = renderHook(useUpdate, { wrapper: UpdateProvider });
@@ -40,7 +46,7 @@ describe("FawnSwitch signed updates", () => {
   });
   it("prevents concurrent installs and does not mark a rejected signature as installed", async () => {
     let reject!: (reason: Error) => void;
-    const downloadAndInstall = vi.fn(() => new Promise<void>((_, fail) => { reject = fail; }));
+    const downloadAndInstall = mocks.invoke.mockImplementation(() => new Promise<void>((_, fail) => { reject = fail; }));
     mocks.check.mockResolvedValue({ version: "0.2.9", close: vi.fn(), downloadAndInstall });
     const { result } = renderHook(useUpdate, { wrapper: UpdateProvider });
     await act(async () => { await result.current.checkUpdate(); });

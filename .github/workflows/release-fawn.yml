@@ -55,7 +55,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Fawn Switch ${{ github.ref_name }}
-          releaseBody: 'FawnSwitch 独立发布。请根据系统选择安装包；应用内更新会验证专用签名。'
+          releaseBody: '请选择适合系统的安装包。'
           releaseDraft: true
           prerelease: false
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}

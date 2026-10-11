@@ -1292,6 +1292,7 @@ pub fn run_upstream() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::install_update_and_restart,
             fawn::fawn_import,
             fawn::fawn_import_cc_switch,
             fawn::fawn_open_dsh_config,
