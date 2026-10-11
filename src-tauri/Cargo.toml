@@ -1,6 +1,6 @@
 [package]
 name = "fawn-switch"
-version = "0.2.8"
+version = "0.2.9"
 description = "Fawn Switch desktop assistant, based on CC Switch"
 authors = ["Jason Young"]
 license = "MIT"

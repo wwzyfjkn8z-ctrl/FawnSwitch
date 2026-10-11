@@ -1,6 +1,6 @@
 {
   "name": "fawn-switch",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Fawn Switch desktop Agent manager",
   "type": "module",
   "scripts": {
