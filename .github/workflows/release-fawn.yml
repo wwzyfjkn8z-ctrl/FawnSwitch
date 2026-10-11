@@ -1,0 +1,73 @@
+name: Release FawnSwitch
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+concurrency:
+  group: fawnswitch-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            bundles: app,dmg
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: pnpm install --frozen-lockfile
+      - name: Verify release version
+        shell: bash
+        run: node scripts/verify-release.mjs "${GITHUB_REF_NAME}"
+      - run: pnpm typecheck
+      - run: node --test scripts/verify-updater.test.mjs
+      - run: pnpm exec vitest run tests/components/AgentScanStatus.test.tsx tests/components/AppsPage.test.tsx tests/contexts/UpdateContext.test.tsx tests/config/fawnProviderCatalog.test.ts tests/components/useApiKeyLink.test.tsx
+      - name: Build signed draft release
+        uses: tauri-apps/tauri-action@944946e3e4cac6603d1fe8f514171e9ecd3c78aa # v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          GEMINI_PUBLIC_OAUTH_CLIENT_ID: ${{ secrets.GEMINI_PUBLIC_OAUTH_CLIENT_ID }}
+          GEMINI_PUBLIC_OAUTH_CLIENT_SECRET: ${{ secrets.GEMINI_PUBLIC_OAUTH_CLIENT_SECRET }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Fawn Switch ${{ github.ref_name }}
+          releaseBody: 'FawnSwitch 独立发布。请根据系统选择安装包；应用内更新会验证专用签名。'
+          releaseDraft: true
+          prerelease: false
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate all updater platforms before publication
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "${GITHUB_REF_NAME}" --repo "$GITHUB_REPOSITORY" --pattern latest.json --dir "$RUNNER_TEMP/updater"
+          node scripts/verify-updater.mjs "$RUNNER_TEMP/updater/latest.json" "$GITHUB_REF_NAME"
+          gh release edit "${GITHUB_REF_NAME}" --repo "$GITHUB_REPOSITORY" --draft=false --latest

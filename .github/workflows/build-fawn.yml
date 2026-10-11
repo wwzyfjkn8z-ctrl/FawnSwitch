@@ -1,0 +1,53 @@
+name: Build Fawn Switch
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            bundles: app,dmg
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.95'
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: node --test scripts/verify-updater.test.mjs
+      - run: pnpm exec vitest run tests/components/AgentScanStatus.test.tsx tests/components/AppsPage.test.tsx tests/contexts/UpdateContext.test.tsx tests/config/fawnProviderCatalog.test.ts tests/components/useApiKeyLink.test.tsx
+      - run: pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          GEMINI_PUBLIC_OAUTH_CLIENT_ID: ${{ secrets.GEMINI_PUBLIC_OAUTH_CLIENT_ID }}
+          GEMINI_PUBLIC_OAUTH_CLIENT_SECRET: ${{ secrets.GEMINI_PUBLIC_OAUTH_CLIENT_SECRET }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fawn-Switch-${{ matrix.target }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
+          if-no-files-found: error

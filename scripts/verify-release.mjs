@@ -1,0 +1,14 @@
+import fs from "node:fs";
+import assert from "node:assert/strict";
+const tag = process.argv[2];
+const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+const config = JSON.parse(fs.readFileSync("src-tauri/tauri.conf.json", "utf8"));
+const cargo = fs.readFileSync("src-tauri/Cargo.toml", "utf8").match(/^version = "([^"]+)"/m)?.[1];
+assert.match(tag ?? "", /^v\d+\.\d+\.\d+$/);
+assert.equal(tag, `v${pkg.version}`);
+assert.equal(config.version, pkg.version);
+assert.equal(cargo, pkg.version);
+assert.equal(config.bundle.createUpdaterArtifacts, true);
+assert.deepEqual(config.plugins.updater.endpoints, ["https://github.com/wwzyfjkn8z-ctrl/FawnSwitch/releases/latest/download/latest.json"]);
+assert.ok(config.plugins.updater.pubkey);
+console.log(`Release ${tag} configuration verified`);

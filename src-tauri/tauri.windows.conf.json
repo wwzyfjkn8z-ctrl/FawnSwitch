@@ -1,0 +1,16 @@
+{
+  "app": {
+    "windows": [{
+      "label": "main",
+      "title": "Fawn Switch",
+      "width": 1100,
+      "height": 740,
+      "minWidth": 900,
+      "minHeight": 600,
+      "visible": true,
+      "resizable": true,
+      "center": true,
+      "decorations": true
+    }]
+  }
+}
